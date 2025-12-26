@@ -60,7 +60,7 @@ if (isset($_POST['name'], $_POST['email'], $_POST['password'])) {
                     <select name="role" class="form-select" required>
                         <option value="" disabled selected>Select Role</option>
                         <option value="enseignant">enseignant</option>
-                        <option value="etudiant">etudiant</option>
+                        <option value="etudiant ">etudiant</option>
                     </select>
                 </div>
                 <button type="submit" class="btn btn-primary w-100">Register</button>
