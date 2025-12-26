@@ -22,7 +22,7 @@ if (isset($_POST['email']) && isset($_POST['password'])) {
         header('Location: ' . '../' . $user['role'] . '/dashboard.php');
         exit();
     } else {
-        $error = "Invalid email or password.";
+        $error = "Invalid email or password";
     }
 } else {
     $error = "";
