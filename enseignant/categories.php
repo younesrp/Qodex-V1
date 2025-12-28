@@ -2,57 +2,60 @@
 session_start();
 require_once '../config/database.php';
 
-
-// --- Gérer la déconnexion en premier ---
-if (isset($_GET['action']) && $_GET['action'] === 'logout') {
-    $_SESSION = [];
-    session_destroy();
-    header('Location: ../auth/login.php');
-    exit();
-}
-
-// --- Vérifier si l'utilisateur est connecté et a le rôle enseignant ---
+// Vérifier que l'utilisateur est enseignant
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'enseignant') {
     header('Location: ../auth/login.php');
-    exit();
+    exit;
 }
 
-// --- Récupérer les données ---
-$categories = $conn->query("SELECT * FROM categories ORDER BY created_at DESC")->fetchAll(PDO::FETCH_ASSOC);
+// SUPPRESSION d'une catégorie
+if (isset($_GET['delete'])) {
+    $delete_id = intval($_GET['delete']);
+    $stmt = $conn->prepare("DELETE FROM categories WHERE id = ?");
+    $stmt->execute([$delete_id]);
+    header('Location: categories.php'); // Refresh page après suppression
+    exit;
+}
 
-$stmt = $conn->prepare("SELECT q.id, q.title, q.description, c.name AS category_name, q.created_at 
-                       FROM quizzes q 
-                       LEFT JOIN categories c ON q.category_id = c.id 
-                       WHERE q.teacher_id = ?");
-$stmt->execute([$_SESSION['user_id']]);
-$quizzes = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// --- Récupérer le nom de l'utilisateur ---
-$stmtUser = $conn->prepare("SELECT username FROM users WHERE id = ?");
-$stmtUser->execute([$_SESSION['user_id']]);
-$user = $stmtUser->fetch(PDO::FETCH_ASSOC);
-$username = $user ? $user['username'] : 'Utilisateur';
-?>
+// Ajouter une catégorie
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['name'])) {
+    $name = trim($_POST['name']);
+    $description = trim($_POST['description']);
+    if ($name !== '') {
+        $stmt = $conn->prepare("INSERT INTO categories (name, description) VALUES (?, ?)");
+        $stmt->execute([$name, $description]);
+        header('Location: categories.php'); // Refresh page
+        exit;
+    } else {
+        $error = "Le nom de la catégorie est obligatoire.";
+    }
+}
 
 // Récupérer toutes les catégories
-$categories = $conn->query("SELECT * FROM categories ORDER BY created_at DESC")->fetchAll(PDO::FETCH_ASSOC);
-
-// Récupérer tous les quiz de l'enseignant
-$stmt = $conn->prepare("SELECT q.id, q.title, q.description, c.name AS category_name, q.created_at 
-                       FROM quizzes q 
-                       LEFT JOIN categories c ON q.category_id = c.id 
-                       WHERE q.teacher_id = ?");
-$stmt->execute([$_SESSION['user_id']]);
-$quizzes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$stmt = $conn->query("SELECT * FROM categories ORDER BY created_at DESC");
+$categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dashboard Enseignant</title>
-<style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion des Catégories</title>
+    <style>
+        body { font-family: 'Inter', sans-serif; background: #F8FAFC; padding: 2rem; color: #0A0E27; }
+        h1 { text-align: center; margin-bottom: 2rem; }
+        .container { max-width: 800px; margin: 45px auto; }
+        form { background: #FFFFFF; padding: 2rem; border-radius: 20px; margin-bottom: 2rem; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        input, textarea { width: 100%; padding: 1rem; border-radius: 10px; border: 1px solid #ccc; margin-bottom: 1rem; }
+        button { padding: 1rem; width: 100%; border-radius: 10px; border: none; background: #0066FF; color: white; font-weight: 700; cursor: pointer; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 1rem; border-bottom: 1px solid #ccc; text-align: left; }
+        th { background: #0066FF; color: white; }
+        .error { color: red; margin-bottom: 1rem; }
+        .delete-btn { color: red; text-decoration: none; font-weight: 700; }
+    </style>
+    <style>
 /* ==================== RESET ==================== */
 * { margin:0; padding:0; box-sizing:border-box; }
 :root {
@@ -99,78 +102,48 @@ footer { text-align:center; padding:3rem 1rem; color: rgba(0,0,0,0.6); }
 </style>
 </head>
 <body>
-
-<!-- NAV -->
-<nav>
+    <nav>
     <div class="container">
         <a href="#" class="logo">Qo<span>dex</span></a>
         <div class="burger-menu" onclick="toggleMenu()"><span></span><span></span><span></span></div>
         <ul id="navMenu">
-            <li><a href="#">Dashboard</a></li>
+            <li><a href="dashboard.php">Dashboard</a></li>
             <li><a href="#">Quiz</a></li>
-            <li><a href="#">Catégories</a></li>
             <li><a href="?action=logout">Déconnexion</a></li>
         </ul>
     </div>
 </nav>
+    <div class="container">
+        <h1>Gestion des Catégories</h1>
 
-<!-- HERO -->
-<section id="hero">
-    <h1>Bonjour <?= htmlspecialchars($username) ?> </h1>
-    <p>Gérez vos quiz et catégories de manière moderne et sécurisée.</p>
-</section>
+        <?php if(!empty($error)) echo "<div class='error'>$error</div>"; ?>
 
-<!-- DASHBOARD -->
-<div class="dashboard">
+        <form method="POST" action="">
+            <h2>Ajouter une catégorie</h2>
+            <input type="text" name="name" placeholder="Nom de la catégorie" required>
+            <textarea name="description" placeholder="Description (facultatif)"></textarea>
+            <button type="submit">Ajouter</button>
+        </form>
 
-    <!-- Catégories -->
-    <div class="card">
-        <h2>Catégories</h2>
-        <a href="categories.php">➕ Ajouter une catégorie</a>
+        <h2>Liste des catégories</h2>
         <table>
-            <tr><th>ID</th><th>Nom</th><th>Description</th><th>Créé le</th></tr>
+            <tr>
+                <th>ID</th>
+                <th>Nom</th>
+                <th>Description</th>
+                <th>Créé le</th>
+                <th>Actions</th>
+            </tr>
             <?php foreach($categories as $cat): ?>
             <tr>
                 <td><?= $cat['id'] ?></td>
                 <td><?= htmlspecialchars($cat['name']) ?></td>
                 <td><?= htmlspecialchars($cat['description']) ?></td>
                 <td><?= $cat['created_at'] ?></td>
+                <td><a class="delete-btn" href="?delete=<?= $cat['id'] ?>" onclick="return confirm('Voulez-vous vraiment supprimer cette catégorie ?');">Supprimer</a></td>
             </tr>
             <?php endforeach; ?>
         </table>
     </div>
-
-    <!-- Quiz -->
-    <div class="card">
-        <h2>Quiz</h2>
-        <a href="add_quiz.php">➕ Créer un quiz</a>
-        <table>
-            <tr><th>ID</th><th>Titre</th><th>Catégorie</th><th>Créé le</th></tr>
-            <?php foreach($quizzes as $q): ?>
-            <tr>
-                <td><?= $q['id'] ?></td>
-                <td><?= htmlspecialchars($q['title']) ?></td>
-                <td><?= htmlspecialchars($q['category_name']) ?></td>
-                <td><?= $q['created_at'] ?></td>
-            </tr>
-            <?php endforeach; ?>
-        </table>
-    </div>
-
-</div>
-
-<footer>
-    &copy; <?= date('Y') ?> Qodex | Plateforme Quiz PHP
-</footer>
-
-<script>
-function toggleMenu(){
-    var navMenu = document.getElementById('navMenu');
-    var burger = document.querySelector('.burger-menu');
-    navMenu.classList.toggle('active');
-    burger.classList.toggle('active');
-}
-</script>
-
 </body>
 </html>
